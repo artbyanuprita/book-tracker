@@ -679,10 +679,10 @@ V.meetings = function () {
   var nm = nextMeeting(), link = meetLink(nm);
   return '<div style="max-width:640px;display:flex;flex-direction:column;gap:12px">' +
     '<div class="meet"><span style="font-size:13px;color:#D8CBB6">' + esc(t('home.next_meeting')) + '</span>' +
-      (nm ? '<b style="font-size:20px">' + esc(nm['Title'] || '') + '</b>' + timesGrid(nm['Start (UTC)']) : '<b>' + esc(t('msg.no_meeting')) + '</b>') +
+      (nm ? '<b style="font-size:20px">' + esc(nm['Title'] || '') + '</b><span style="font-size:15px;color:#D8CBB6">' + esc(fmtDayIn(nm['Start (UTC)']) + ' · ' + relDay(dayIn(nm['Start (UTC)']))) + '</span>' + timesGrid(nm['Start (UTC)']) : '<b>' + esc(t('msg.no_meeting')) + '</b>') +
       (link ? '<a class="joinB" href="' + esc(link) + '" target="_blank" rel="noopener">' + ICON.vid + esc(t('btn.join_meeting')) + '</a><span style="font-size:12px;color:#D8CBB6;text-align:center">' + esc(link.replace(/^https?:\/\//, '')) + '</span>' : '') + '</div>' +
     (nm && nm['Agenda'] ? '<div class="card"><b>' + esc(t('field.agenda')) + '</b><div style="white-space:pre-wrap">' + esc(nm['Agenda']) + '</div></div>' : '') +
-    '<div class="note">' + esc(t('app.coming')) + '</div></div>';
+    '</div>';
 };
 
 V.share = function () {

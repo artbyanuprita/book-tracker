@@ -116,6 +116,11 @@ textarea.fld{padding:10px 12px;min-height:80px;resize:vertical;width:100%}
 .bmrow .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .seg{display:flex;gap:2px}.seg i{width:9px;height:16px;border-radius:3px;background:#E9DFCF}.seg i.ip{background:#E6B89C}.seg i.dn{background:var(--geru)}
 .tmeta{display:block;font-size:12px;color:var(--muted);text-decoration:none}
+.rec{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#FBE4DC;border:1.5px solid var(--geru);border-radius:14px;padding:10px 12px;font-weight:700}
+.rec .dot{width:12px;height:12px;border-radius:50%;background:#C0392B;animation:blink 1s infinite}
+@keyframes blink{50%{opacity:.25}}
+.shr{display:flex;align-items:center;gap:10px}.shr img{width:56px;height:56px;object-fit:cover;border-radius:10px;flex:none;background:var(--line)}
+.shr .shi{width:56px;height:56px;border-radius:10px;flex:none;background:#F1E7D6;display:flex;align-items:center;justify-content:center;font-size:24px}
 .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.grid4 .sb{min-height:70px;font-size:13px;padding:0 2px}
 .cell{position:relative;min-height:44px;border-radius:10px;border:1px solid var(--line);background:#FFFDF8;font-size:12px;font-weight:600;color:var(--muted);padding:2px;line-height:1.15;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 .cell.ip{background:#E6B89C;border-color:#C98F6E;color:#5E2715}
@@ -301,7 +306,8 @@ var S = {
   person: '', unit: '', status: '', showDone: false,
   ideaPerson: '', ideaUnit: '',
   bmSearch: '', bmOwner: '', bmHideDone: false, bmOpen: {},
-  sheetOpen: false, confirmDel: false
+  sheetOpen: false, confirmDel: false,
+  shUnit: '', shCap: ''
 };
 (function () { var tb = B.tabs.filter(function (x) { return x.id === S.tab; })[0]; if (tb) S.phase = tb.phase || 1; })();
 
@@ -542,7 +548,7 @@ V.home = function () {
       '<div class="tile"><span class="tl">' + esc(t('home.next_up')) + '</span><span style="font-weight:700;font-size:16px">' + (nm ? esc(nm['Title'] || t('tab.meetings')) : esc(t('msg.no_meeting'))) + '</span><span class="muted">' + (nm ? esc(fmtTimes(nm['Start (UTC)'])) : '') + '</span></div>' +
     '</div>' +
     '<div class="cols"><div class="main" style="display:flex;flex-direction:column;gap:12px">' +
-      (visibleTabs().some(function (x) { return x.id === 'share'; }) ? '<div class="big2"><button class="bigb" data-act="coming">' + ICON.cam + esc(t('btn.send_photo')) + '</button><button class="bigb" data-act="coming">' + ICON.mic + esc(t('btn.send_voice')) + '</button></div>' : '') +
+      (visibleTabs().some(function (x) { return x.id === 'share'; }) ? '<div class="big2"><button class="bigb" data-act="pick" data-kind="photo" data-go="1">' + ICON.cam + esc(t('btn.send_photo')) + '</button><button class="bigb" data-act="voice" data-go="1">' + ICON.mic + esc(t('btn.send_voice')) + '</button></div>' : '') +
       stuck.map(function (k) { return '<div class="help"><b>' + esc(t('home.needs_help')) + '</b><div>' + esc(k.owner) + ': ' + esc(k.text) + (k.note ? ' · ' + esc(k.note) : '') + '</div></div>'; }).join('') +
       '<h2 class="h2">' + esc(t('home.team_tasks', 'Team tasks')) + '</h2>' +
       '<div class="card" style="padding-top:8px"><div class="row" style="flex-wrap:nowrap;margin-bottom:4px"><input class="fld grow" id="hTask" placeholder="' + esc(t('home.add_task_ph', 'Add a task for the team…')) + '" aria-label="' + esc(t('field.task')) + '" enterkeyhint="done"><button class="btn" data-act="homeAdd">' + esc(t('btn.add')) + '</button></div>' +
@@ -624,7 +630,8 @@ V.bookmap = function () {
     var mark = v === 'done' ? '✓' : v === 'in_progress' ? '…' : '';
     return '<button class="cell ' + cls + (c && c['Comment'] ? ' hasc' : '') + '" data-act="cell" data-unit="' + esc(u['Unit ID']) + '" data-stage="' + esc(st['Stage ID']) + '" aria-label="' + esc((u['Short name'] || u['Name']) + ' · ' + stageLabel(st) + ' · ' + listLabel('cell_status', v)) + '" title="' + esc(c && c['Comment'] ? c['Comment'] : stageLabel(st)) + '">' + (short ? esc(stageLabel(st)) + '<br>' : '') + mark + '</button>';
   };
-  var folder = function (u) { return u['Folder ID'] ? '<a class="btn2" style="display:inline-flex;align-items:center;text-decoration:none" target="_blank" rel="noopener" href="https://drive.google.com/drive/folders/' + encodeURIComponent(u['Folder ID']) + '">' + esc(t('btn.open_folder')) + '</a>' : ''; };
+  var folder = function (u) { return u['Folder ID'] ? '<a class="btn2" style="display:inline-flex;align-items:center;text-decoration:none" target="_blank" rel="noopener" href="https://drive.google.com/drive/folders/' + encodeURIComponent(u['Folder ID']) + '">' + '📁 ' + esc(t('btn.open_folder', 'Open folder')) + '</a>' : ''; };
+  var folderIcon = function (u) { return u['Folder ID'] ? ' <a style="text-decoration:none;margin-left:4px" target="_blank" rel="noopener" title="' + esc(t('btn.open_folder', 'Open folder')) + '" aria-label="' + esc(t('btn.open_folder', 'Open folder')) + '" href="https://drive.google.com/drive/folders/' + encodeURIComponent(u['Folder ID']) + '">📁</a>' : ''; };
   var sections = []; units.forEach(function (u) { var s = u['Section / Part'] || ''; if (sections.indexOf(s) === -1) sections.push(s); });
   var cols = '220px repeat(' + B.stages.length + ',minmax(0,1fr)) 110px 50px';
   var grid = '<div class="bmt" style="grid-template-columns:' + cols + '"><span></span>' + B.stages.map(function (st) { return '<span class="thd">' + esc(stageLabel(st)) + '</span>'; }).join('') + '<span class="thd">' + esc(t('bm.owner')) + '</span><span></span>';
@@ -633,7 +640,7 @@ V.bookmap = function () {
     if (sec) { grid += '<div class="sect" style="grid-column:1/-1">' + esc(sec) + '</div>'; cards += '<div class="sect">' + esc(sec) + '</div>'; }
     units.filter(function (u) { return (u['Section / Part'] || '') === sec; }).forEach(function (u) {
       var p = unitPct(u['Unit ID']);
-      grid += '<span><b>' + esc(u['Short name']) + '</b> · ' + esc(u['Name']) + '</span>' + B.stages.map(function (st) { return cellBtn(u, st, false); }).join('') + '<span class="muted">' + esc(u['Owner'] || '—') + '</span><b style="text-align:right">' + p + '%</b>';
+      grid += '<span><b>' + esc(u['Short name']) + '</b> · ' + esc(u['Name']) + folderIcon(u) + '</span>' + B.stages.map(function (st) { return cellBtn(u, st, false); }).join('') + '<span class="muted">' + esc(u['Owner'] || '—') + '</span><b style="text-align:right">' + p + '%</b>';
       var open = !!S.bmOpen[u['Unit ID']];
       var seg = B.stages.map(function (st) { var c = cellOf(u['Unit ID'], st['Stage ID']); var v = c ? c['Status'] : ''; return '<i class="' + (v === 'done' ? 'dn' : v === 'in_progress' ? 'ip' : '') + '"></i>'; }).join('');
       cards += '<div class="bmitem"><button class="bmrow" data-act="bmToggle" data-id="' + esc(u['Unit ID']) + '" aria-expanded="' + (open ? 'true' : 'false') + '">' +
@@ -663,8 +670,8 @@ V.guide = function () {
       (mine.length ? mine.map(function (k) { return tickRow(k).replace('class="ck"', 'class="ck" style="min-height:60px;font-size:18px"'); }).join('') : '<p class="muted">' + esc(t('msg.no_tasks')) + '</p>') + '</div>' +
     '<div class="meet"><b style="font-size:18px">' + esc(t('home.next_meeting')) + ' · ' + esc(nm ? fmtTimes(nm['Start (UTC)']) : t('msg.no_meeting')) + '</b>' +
       (link ? '<a class="joinB" href="' + esc(link) + '" target="_blank" rel="noopener">' + ICON.vid + esc(t('btn.join_meeting')) + '</a>' : '') + '</div>' +
-    '<button class="sb" data-act="coming" style="background:var(--geru);color:var(--card);border-color:var(--geru);font-size:20px">' + ICON.cam + esc(t('btn.send_photo')) + '</button>' +
-    '<div class="big2"><button class="sb" data-act="coming" style="font-size:18px">' + ICON.mic + esc(t('btn.send_voice')) + '</button><button class="sb" data-act="coming" style="font-size:18px">' + ICON.vid + esc(t('btn.send_video')) + '</button></div></div>';
+    '<button class="sb" data-act="pick" data-kind="photo" data-go="1" style="background:var(--geru);color:var(--card);border-color:var(--geru);font-size:20px">' + ICON.cam + esc(t('btn.send_photo')) + '</button>' +
+    '<div class="big2"><button class="sb" data-act="voice" data-go="1" style="font-size:18px">' + ICON.mic + esc(t('btn.send_voice')) + '</button><button class="sb" data-act="pick" data-kind="video" data-go="1" style="font-size:18px">' + ICON.vid + esc(t('btn.send_video')) + '</button></div></div>';
 };
 
 V.meetings = function () {
@@ -678,10 +685,97 @@ V.meetings = function () {
 };
 
 V.share = function () {
-  return '<div class="note">' + esc(t('app.coming')) + '</div>' +
-    '<div class="grid4"><button class="sb" data-act="coming">' + ICON.cam + esc(t('btn.photo')) + '</button><button class="sb" data-act="coming">' + ICON.vid + esc(t('btn.video')) + '</button><button class="sb" data-act="coming">' + ICON.file + esc(t('btn.file')) + '</button><button class="sb" data-act="coming">' + ICON.mic + esc(t('btn.voice_note')) + '</button></div>' +
+  var icon = { photo: '📷', video: '🎬', file: '📎', voice: '🎙️' };
+  var sel = '<select class="fld" id="shUnit" aria-label="' + esc(unitWord()) + '"><option value="">' + esc(t('field.no_chapter', 'No chapter')) + '</option>' +
+    B.units.map(function (u) { return '<option value="' + esc(u['Unit ID']) + '"' + (S.shUnit === String(u['Unit ID']) ? ' selected' : '') + '>' + esc(u['Short name'] || u['Name']) + '</option>'; }).join('') + '</select>';
+  var rec = REC ? '<div class="rec"><span class="dot" aria-hidden="true"></span><span>' + esc(t('share.recording', 'Recording')) + ' <span id="recTime">' + recClock() + '</span></span>' +
+    '<span class="grow"></span><button class="btn" data-act="voiceStop">' + esc(t('share.stop_send', 'Stop & send')) + '</button><button class="btn2" data-act="voiceCancel">' + esc(t('share.cancel', 'Cancel')) + '</button></div>' : '';
+  var list = B.shared || [];
+  return '<div class="card" style="display:flex;flex-direction:column;gap:10px">' +
+      '<div class="row">' + sel + '<input class="fld grow" id="shCap" value="' + esc(S.shCap) + '" placeholder="' + esc(t('share.caption', 'Add a note (optional)')) + '" aria-label="' + esc(t('share.caption', 'Add a note (optional)')) + '"></div>' +
+      '<div class="grid4"><button class="sb" data-act="pick" data-kind="photo">' + ICON.cam + esc(t('btn.photo')) + '</button><button class="sb" data-act="pick" data-kind="video">' + ICON.vid + esc(t('btn.video')) + '</button><button class="sb" data-act="pick" data-kind="file">' + ICON.file + esc(t('btn.file')) + '</button><button class="sb" data-act="voice">' + ICON.mic + esc(t('btn.voice_note')) + '</button></div>' +
+      rec +
+      '<p class="muted" style="margin:0">' + esc(t('share.hint', 'Saved in the chapter\'s Drive folder. Up to 30 MB per file.')) + '</p></div>' +
+    '<div class="card"><h2 class="h2">' + esc(t('share.recent', 'Recently shared')) + '</h2>' +
+      (list.length ? list.map(function (r) {
+        var thumb = r['Type'] === 'photo' && r['Thumbnail'] ? '<img src="' + esc(r['Thumbnail']) + '" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.outerHTML=\'<span class=&quot;shi&quot;>📷</span>\'">' : '<span class="shi" aria-hidden="true">' + (icon[r['Type']] || '📎') + '</span>';
+        return '<div class="recent shr">' + thumb + '<div class="grow" style="min-width:0"><b>' + esc(r['Person'] || r['Added by']) + '</b> · ' + esc(unitShort(r['Unit'])) + ' · <span class="muted">' + esc(ago(r['Date and time'] || r['Added on'])) + '</span>' +
+          (r['Caption'] ? '<div style="white-space:pre-wrap;overflow-wrap:anywhere">' + esc(r['Caption']) + '</div>' : '') + '</div>' +
+          (r['File link'] ? '<a class="btn2" style="display:inline-flex;align-items:center;text-decoration:none;flex:none" target="_blank" rel="noopener" href="' + esc(r['File link']) + '">' + esc(t('share.open', 'Open')) + '</a>' : '') + '</div>';
+      }).join('') : '<p class="muted">' + esc(t('share.none', 'Nothing shared yet.')) + '</p>') + '</div>' +
     '<button class="sb" data-act="newIdeaFromShare" style="min-height:50px;flex-direction:row;gap:8px">' + ICON.pen + esc(t('btn.quick_note')) + '</button>';
 };
+
+// ───────── Share: pick files, record voice, send to Drive ─────────
+var SHARE_MAX = 30 * 1024 * 1024, REC = null, recTimer = null;
+function recClock() { if (!REC) return '0:00'; var s = Math.floor((Date.now() - REC.start) / 1000); return Math.floor(s / 60) + ':' + pad(s % 60); }
+function keepShareInputs() { if ($('shUnit')) S.shUnit = $('shUnit').value; if ($('shCap')) S.shCap = $('shCap').value; }
+function goShare(el) { if (el && el.dataset && el.dataset.go && S.tab !== 'share') { S.tab = 'share'; var tb = B.tabs.filter(function (x) { return x.id === 'share'; })[0]; if (tb && tb.phase) S.phase = tb.phase; window.scrollTo(0, 0); render(); } }
+function toB64(blob) { return new Promise(function (res, rej) { var r = new FileReader(); r.onload = function () { res(String(r.result).split(',')[1] || ''); }; r.onerror = function () { rej(new Error('Could not read the file.')); }; r.readAsDataURL(blob); }); }
+function shrinkPhoto(file) {
+  var max = +B.settings.photo_max_px || 2000;
+  if (!/^image\/(jpeg|png|webp)$/i.test(file.type)) return Promise.resolve({ blob: file, name: file.name });
+  return new Promise(function (res) {
+    var url = URL.createObjectURL(file), img = new Image();
+    img.onload = function () {
+      var k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+      if (k === 1 && file.size < 1500000) { URL.revokeObjectURL(url); res({ blob: file, name: file.name }); return; }
+      var c = document.createElement('canvas'); c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+      c.toBlob(function (b) { res(b ? { blob: b, name: String(file.name || 'photo').replace(/\.[^.]+$/, '') + '.jpg' } : { blob: file, name: file.name }); }, 'image/jpeg', 0.85);
+    };
+    img.onerror = function () { URL.revokeObjectURL(url); res({ blob: file, name: file.name }); };
+    img.src = url;
+  });
+}
+function sendBlob(blob, name, kind, n, total) {
+  if (blob.size > SHARE_MAX) { toast(t('share.too_big', 'This file is over 30 MB. Please send it through Drive or WhatsApp.') + ' (' + name + ')', 'err', 7000); return Promise.resolve(); }
+  toast(t('share.sending', 'Sending…') + (total > 1 ? ' ' + n + '/' + total : '') + ' · ' + name, 'busy');
+  return toB64(blob).then(function (b64) {
+    return run('appShare', { type: kind, name: name, mime: blob.type || 'application/octet-stream', data: b64, unit: S.shUnit, caption: S.shCap });
+  }).then(function (row) {
+    B.shared = [row].concat(B.shared || []); logLocal('added', 'SharedItems', name);
+    if (n === total) { S.shCap = ''; toast(t('share.sent', 'Sent ✓'), 'ok'); }
+    render();
+  }, fail);
+}
+function pickFiles(kind) {
+  var inp = document.createElement('input'); inp.type = 'file';
+  inp.accept = kind === 'photo' ? 'image/*' : kind === 'video' ? 'video/*' : '';
+  inp.multiple = kind !== 'video';
+  inp.style.display = 'none'; document.body.appendChild(inp);
+  inp.onchange = function () {
+    var files = Array.prototype.slice.call(inp.files || []); inp.remove(); if (!files.length) return;
+    var chain = Promise.resolve();
+    files.forEach(function (f, i) {
+      chain = chain.then(function () {
+        var k = kind === 'file' && /^image\//.test(f.type) ? 'photo' : kind;
+        return (k === 'photo' ? shrinkPhoto(f) : Promise.resolve({ blob: f, name: f.name })).then(function (x) { return sendBlob(x.blob, x.name || k, k, i + 1, files.length); });
+      });
+    });
+  };
+  inp.click();
+}
+function startVoice() {
+  if (REC) return;
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder) { toast(t('share.no_mic', 'This browser cannot record. Record in your phone\'s recorder app and send it with File.'), 'err', 7000); return; }
+  navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+    var mime = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/webm', 'audio/aac'].filter(function (m) { return MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(m); })[0] || '';
+    var mr; try { mr = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream); } catch (e) { mr = new MediaRecorder(stream); }
+    REC = { mr: mr, chunks: [], stream: stream, start: Date.now(), cancel: false };
+    mr.ondataavailable = function (e) { if (e.data && e.data.size) REC.chunks.push(e.data); };
+    mr.onstop = function () {
+      var r = REC; REC = null; clearInterval(recTimer); r.stream.getTracks().forEach(function (tr) { tr.stop(); }); render();
+      if (r.cancel || !r.chunks.length) return;
+      var type = (mr.mimeType || mime || 'audio/webm').split(';')[0];
+      var ext = /mp4|aac|m4a/.test(type) ? 'm4a' : 'webm';
+      sendBlob(new Blob(r.chunks, { type: type }), 'Voice note.' + ext, 'voice', 1, 1);
+    };
+    mr.start(1000);
+    recTimer = setInterval(function () { var el = $('recTime'); if (el) el.textContent = recClock(); if (REC && Date.now() - REC.start > 15 * 60 * 1000) REC.mr.stop(); }, 500);
+    render();
+  }, function () { toast(t('share.mic_denied', 'Please allow the microphone for this site, then try again.'), 'err', 7000); });
+}
 
 V.settings = function () {
   if (!B.me.isOwner) return '';
@@ -786,6 +880,10 @@ var ACT = {
   },
   phase: function (el) { S.phase = +el.dataset.id; var f = visibleTabs().filter(function (x) { return x.phase === S.phase; })[0]; S.tab = f ? f.id : S.tab; window.scrollTo(0, 0); render(); },
   tab: function (el) { S.tab = el.dataset.id; var tb = B.tabs.filter(function (x) { return x.id === S.tab; })[0]; if (tb && tb.phase) S.phase = tb.phase; window.scrollTo(0, 0); render(); },
+  pick: function (el) { keepShareInputs(); goShare(el); pickFiles(el.dataset.kind || 'file'); },
+  voice: function (el) { keepShareInputs(); goShare(el); startVoice(); },
+  voiceStop: function () { keepShareInputs(); if (REC) REC.mr.stop(); },
+  voiceCancel: function () { if (REC) { REC.cancel = true; REC.mr.stop(); } },
   coming: function () { toast(t('app.coming'), 'busy', 2500); setTimeout(function () { $('toast').className = 'toast'; }, 2500); },
   myTasks: function () { S.person = B.me.name; S.tab = 'tasks'; S.phase = 1; render(); },
   newTask: function () { taskSheet(null); },

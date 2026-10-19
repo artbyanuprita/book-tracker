@@ -330,6 +330,7 @@ function locale() { return S.lang === 'hi' ? 'hi-IN' : 'en-GB'; }
 // ───────── Lookups ─────────
 function unitWord() { var w = B.settings.unit_name || 'Chapter'; return t('unit.' + w, w); }
 function unitById(id) { return B.units.filter(function (u) { return String(u['Unit ID']) === String(id); })[0]; }
+function unitFull(u) { return u['Short name'] && u['Name'] && u['Short name'] !== u['Name'] ? u['Short name'] + ' · ' + u['Name'] : (u['Short name'] || u['Name'] || ''); }
 function unitShort(id) { var u = unitById(id); return u ? (u['Short name'] || u['Name']) : (id ? id : t('field.no_chapter', 'No chapter')); }
 function listItems(name) { return B.lists[name] || []; }
 function listLabel(name, id) { var it = listItems(name).filter(function (x) { return x.id === id; })[0]; return it ? t(it.key, id) : (id || ''); }
@@ -570,7 +571,7 @@ V.tasks = function () {
     return true;
   }).sort(taskSort);
   var personOpts = '<option value="">' + esc(t('home.everyone')) + '</option>' + teamNames().map(function (n) { return '<option' + (S.person === n ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join('');
-  var unitOpts = '<option value="">' + esc(t('filter.all_units')) + '</option>' + B.units.map(function (u) { return '<option value="' + esc(u['Unit ID']) + '"' + (S.unit === String(u['Unit ID']) ? ' selected' : '') + '>' + esc(u['Short name'] || u['Name']) + '</option>'; }).join('');
+  var unitOpts = '<option value="">' + esc(t('filter.all_units')) + '</option>' + B.units.map(function (u) { return '<option value="' + esc(u['Unit ID']) + '"' + (S.unit === String(u['Unit ID']) ? ' selected' : '') + '>' + esc(unitFull(u)) + '</option>'; }).join('');
   var statusOpts = '<option value="">' + esc(t('filter.all_status')) + '</option>' + listItems('task_status').map(function (x) { return '<option value="' + esc(x.id) + '"' + (S.status === x.id ? ' selected' : '') + '>' + esc(t(x.key, x.id)) + '</option>'; }).join('');
   return '' +
     '<div class="card row"><input class="fld grow" id="qTask" placeholder="' + esc(t('field.task')) + '…" aria-label="' + esc(t('field.task')) + '" enterkeyhint="done"><button class="btn" data-act="quickAdd">' + esc(t('btn.add')) + '</button></div>' +
@@ -601,7 +602,7 @@ V.ideas = function () {
   var unitSel = function (id, cur, withAll) {
     return '<select class="fld" id="' + id + '"' + (withAll ? ' data-act="filter"' : '') + ' aria-label="' + esc(unitWord()) + '">' +
       (withAll ? '<option value="">' + esc(t('filter.all_units')) + '</option><option value="_"' + (cur === '_' ? ' selected' : '') + '>' + esc(t('field.no_chapter', 'No chapter')) + '</option>' : '<option value="">' + esc(t('field.no_chapter', 'No chapter')) + '</option>') +
-      B.units.map(function (u) { return '<option value="' + esc(u['Unit ID']) + '"' + (cur === String(u['Unit ID']) ? ' selected' : '') + '>' + esc(u['Short name'] || u['Name']) + '</option>'; }).join('') + '</select>';
+      B.units.map(function (u) { return '<option value="' + esc(u['Unit ID']) + '"' + (cur === String(u['Unit ID']) ? ' selected' : '') + '>' + esc(unitFull(u)) + '</option>'; }).join('') + '</select>';
   };
   return '' +
     '<div class="card" style="display:flex;flex-direction:column;gap:8px"><textarea class="fld" id="niText" rows="2" placeholder="' + esc(t('field.idea')) + '…" aria-label="' + esc(t('field.idea')) + '" style="min-height:60px"></textarea>' +
@@ -687,7 +688,7 @@ V.meetings = function () {
 V.share = function () {
   var icon = { photo: '📷', video: '🎬', file: '📎', voice: '🎙️' };
   var sel = '<select class="fld" id="shUnit" aria-label="' + esc(unitWord()) + '"><option value="">' + esc(t('field.no_chapter', 'No chapter')) + '</option>' +
-    B.units.map(function (u) { return '<option value="' + esc(u['Unit ID']) + '"' + (S.shUnit === String(u['Unit ID']) ? ' selected' : '') + '>' + esc(u['Short name'] || u['Name']) + '</option>'; }).join('') + '</select>';
+    B.units.map(function (u) { return '<option value="' + esc(u['Unit ID']) + '"' + (S.shUnit === String(u['Unit ID']) ? ' selected' : '') + '>' + esc(unitFull(u)) + '</option>'; }).join('') + '</select>';
   var rec = REC ? '<div class="rec"><span class="dot" aria-hidden="true"></span><span>' + esc(t('share.recording', 'Recording')) + ' <span id="recTime">' + recClock() + '</span></span>' +
     '<span class="grow"></span><button class="btn" data-act="voiceStop">' + esc(t('share.stop_send', 'Stop & send')) + '</button><button class="btn2" data-act="voiceCancel">' + esc(t('share.cancel', 'Cancel')) + '</button></div>' : '';
   var list = B.shared || [];

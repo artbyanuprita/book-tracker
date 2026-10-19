@@ -30,7 +30,9 @@ a{color:var(--geru)}
 .top{position:sticky;top:0;z-index:20;background:var(--cream)}
 .border{display:block;width:100%;height:12px}
 .hdr{max-width:1440px;margin:0 auto;padding:6px max(14px,env(safe-area-inset-left)) 4px;display:flex;justify-content:space-between;align-items:center;gap:10px}
-.brand{display:flex;align-items:center;gap:10px;min-width:0}
+.brand{display:flex;align-items:center;gap:10px;min-width:0;flex:1 1 150px}
+.hdr{flex-wrap:wrap}.hright{margin-left:auto}
+@media (max-width:520px){.lbl{display:none}}
 .icon{width:36px;height:36px;border-radius:10px;background:var(--geru);display:flex;align-items:center;justify-content:center;flex:none}
 .title{font-size:18px;font-weight:800;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .subtitle{display:none;font-size:15px;color:var(--muted)}
@@ -470,7 +472,7 @@ function renderNav() {
   var next = langs[(langs.indexOf(cur) + 1) % (langs.length || 1)];
   $('hLang').textContent = (cur ? cur.name : 'EN') + (next && next !== cur ? ' · ' + next.name : '');
   $('hLang').setAttribute('aria-label', 'Language');
-  $('hFeedback').textContent = '💬 ' + t('btn.feedback', 'Feedback');
+  $('hFeedback').innerHTML = '💬<span class="lbl"> ' + esc(t('btn.feedback', 'Feedback')) + '</span>'; $('hFeedback').setAttribute('aria-label', t('btn.feedback', 'Feedback'));
 
   var m = nextMeeting(), link = meetLink(m);
   $('mLabel').textContent = t('home.next_meeting') + (m && !wide() ? ' · ' + fmtDayIn(m['Start (UTC)']) + ' · ' + relDay(dayIn(m['Start (UTC)'])) : '');

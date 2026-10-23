@@ -12,6 +12,8 @@
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://script.google.com">
+<link rel="preconnect" href="https://script.googleusercontent.com">
 <link href="https://fonts.googleapis.com/css2?family=Mukta:wght@400;500;700;800&display=swap" rel="stylesheet">
 <style>
 /* BOOK TRACKER · TRACKER PAGE (hosted on your own website)
@@ -248,8 +250,17 @@ function api(action, extra) {
 
 var started = false;
 function gateText(msg, isErr) { var m = gid('gateMsg'); m.textContent = msg || ''; m.className = isErr ? 'err' : ''; }
+// Last data the server sent, kept on this device so the page opens at once next time.
+function saveBoot(b) { try { if (b) store('bt_boot', JSON.stringify(b)); } catch (e) {} }
+function cachedBoot() {
+  try {
+    var b = JSON.parse(stored('bt_boot') || 'null');
+    if (b && b.me && b.me.email && b.me.email === stored('bt_email')) { b.__cached = true; return b; }
+  } catch (e) {}
+  return null;
+}
 function showGate(reason) {
-  store('bt_session', null);
+  store('bt_session', null); store('bt_boot', null);
   gid('gate').classList.remove('hidden');
   gid('gbtn').classList.remove('hidden');
   if (reason === 'expired') gateText('Please sign in again. · कृपया फिर से साइन इन करें।');
@@ -271,11 +282,12 @@ function onCredential(resp) {
 }
 function begin(boot) {
   gid('gate').classList.add('hidden');
+  if (!boot.__cached) saveBoot(boot);
   if (!started) { started = true; startApp(boot); } else { window.location.reload(); }
 }
 function signOut() {
   api('signOut').catch(function () {});
-  store('bt_session', null); store('bt_email', null);
+  store('bt_session', null); store('bt_email', null); store('bt_boot', null);
   try { google.accounts.id.disableAutoSelect(); } catch (e) {}
   window.location.reload();
 }
@@ -293,6 +305,8 @@ function renderWho(b) {
     gateText('Setup is not finished: add API_URL and CLIENT_ID at the top of this page.', true); return;
   }
   if (!stored('bt_session')) { gid('gbtn').classList.remove('hidden'); return; }
+  var cached = cachedBoot();
+  if (cached) { begin(cached); return; }   // show saved data now; startApp fetches fresh data
   gateText('Loading… · लोड हो रहा है…');
   api('appRefresh').then(begin, function (e) { if (e.code !== 'signin') { gateText(e.message, true); gid('gbtn').classList.remove('hidden'); } });
 })();
@@ -462,7 +476,7 @@ function refresh(quiet) {
   if (S.sheetOpen) return Promise.resolve();
   if (!quiet) toast(t('app.loading'), 'busy');
   return run('appRefresh').then(function (d) {
-    var lang = S.lang; B = d; S.lang = lang; render(); if (!quiet) toast('✓', 'ok', 800);
+    var lang = S.lang; B = d; S.lang = lang; saveBoot(d); render(); if (!quiet) toast('✓', 'ok', 800);
   }, function (e) { if (!quiet) fail(e); });
 }
 
@@ -1028,6 +1042,7 @@ var lastWide = wide();
 window.addEventListener('resize', function () { if (wide() !== lastWide) { lastWide = wide(); render(); } });
 
 render();
+if (B.__cached) refresh(true);   // opened from saved data: get the latest quietly
 
 }
 </script>

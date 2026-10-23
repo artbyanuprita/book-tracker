@@ -306,7 +306,18 @@ function renderWho(b) {
   }
   if (!stored('bt_session')) { gid('gbtn').classList.remove('hidden'); return; }
   var cached = cachedBoot();
-  if (cached) { begin(cached); return; }   // show saved data now; startApp fetches fresh data
+  if (cached) {   // show saved data as soon as the whole page has loaded; startApp then fetches fresh data
+    var go = function () {
+      try { begin(cached); }
+      catch (err) {   // saved copy unusable: drop it and load from the server as before
+        store('bt_boot', null); started = false;
+        gid('gate').classList.remove('hidden'); gateText('Loading… · लोड हो रहा है…');
+        api('appRefresh').then(begin, function (e) { if (e.code !== 'signin') { gateText(e.message, true); gid('gbtn').classList.remove('hidden'); } });
+      }
+    };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', go); else go();
+    return;
+  }
   gateText('Loading… · लोड हो रहा है…');
   api('appRefresh').then(begin, function (e) { if (e.code !== 'signin') { gateText(e.message, true); gid('gbtn').classList.remove('hidden'); } });
 })();

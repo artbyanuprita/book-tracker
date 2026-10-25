@@ -451,11 +451,29 @@ function unitPct(unitId) {
   var s = 0; B.stages.forEach(function (st) { var c = cellOf(unitId, st['Stage ID']); var v = c ? c['Status'] : ''; s += v === 'done' ? 1 : v === 'in_progress' ? 0.5 : 0; });
   return Math.round(s / B.stages.length * 100);
 }
+// Weekly meeting: every Sunday 9:00 PM India time unless Settings has weekly_meeting
+// (for example "Sunday 21:00", times in India time) or "off".
+var WEEKDAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+function weeklyMeeting(now) {
+  var s = String(B.settings.weekly_meeting || 'Sunday 21:00').trim().toLowerCase();
+  if (!s || s === 'off' || s === 'no') return null;
+  var m = s.match(/^([a-z]+)\s+(\d{1,2})(?::(\d{2}))?/); if (!m) return null;
+  var day = WEEKDAYS.indexOf(m[1].slice(0, 3)); if (day < 0) return null;
+  var utcMin = (+m[2]) * 60 + (+(m[3] || 0)) - 330;   // India is UTC+5:30 all year
+  var d = new Date(now); d.setUTCHours(0, 0, 0, 0);
+  var start = d.getTime() - d.getUTCDay() * 86400000 + day * 86400000 + utcMin * 60000;   // this week's
+  while (start <= now - 3600000) start += 7 * 86400000;   // still shown until an hour after it starts
+  return { 'Title': B.settings.weekly_meeting_title || (S.lang === 'hi' ? 'साप्ताहिक टीम मीटिंग' : 'Weekly team meeting'), 'Start (UTC)': new Date(start).toISOString(), __weekly: true };
+}
 function nextMeeting() {
   var now = Date.now();
   var m = B.meetings.filter(function (x) { return x['Start (UTC)'] && new Date(x['Start (UTC)']).getTime() > now - 3600000; })
     .sort(function (a, b) { return new Date(a['Start (UTC)']) - new Date(b['Start (UTC)']); });
-  return m[0] || null;
+  var w = weeklyMeeting(now);
+  if (!m[0]) return w;
+  if (!w) return m[0];
+  // A row in the Meetings sheet wins when it is sooner or for the same meeting (it may carry an agenda).
+  return new Date(m[0]['Start (UTC)']).getTime() <= new Date(w['Start (UTC)']).getTime() + 3600000 ? m[0] : w;
 }
 function meetLink(m) { return (m && m['Meet link']) || B.settings.meeting_link || ''; }
 

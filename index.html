@@ -103,6 +103,8 @@ textarea.fld{padding:10px 12px;min-height:80px;resize:vertical;width:100%}
 .meta{display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:13px;color:var(--muted)}
 .stucknote{color:var(--red);font-weight:600;font-size:14px}
 .recent{font-size:14px;padding:6px 0;border-bottom:1px dashed #E3D7C3}
+.chcols{display:grid;grid-template-columns:1fr;gap:12px}
+@media (min-width:900px){.chcols{grid-template-columns:3fr 2fr}}
 .recent:last-child{border-bottom:none}
 .meet{background:var(--ink);color:var(--cream);border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:8px}
 .joinB{min-height:56px;border-radius:12px;background:var(--cream);color:var(--ink);font-weight:800;font-size:18px;display:flex;align-items:center;justify-content:center;gap:8px;text-decoration:none}
@@ -332,7 +334,8 @@ var S = {
   ideaPerson: '', ideaUnit: '',
   bmSearch: '', bmOwner: '', bmHideDone: false, bmOpen: {},
   sheetOpen: false, confirmDel: false,
-  shUnit: '', shCap: ''
+  shUnit: '', shCap: '',
+  chUnit: '', chDraft: {}
 };
 (function () { var tb = B.tabs.filter(function (x) { return x.id === S.tab; })[0]; if (tb) S.phase = tb.phase || 1; })();
 
@@ -707,8 +710,38 @@ V.meetings = function () {
       (nm ? '<b style="font-size:20px">' + esc(nm['Title'] || '') + '</b><span style="font-size:15px;color:#D8CBB6">' + esc(fmtDayIn(nm['Start (UTC)']) + ' · ' + relDay(dayIn(nm['Start (UTC)']))) + '</span>' + timesGrid(nm['Start (UTC)']) : '<b>' + esc(t('msg.no_meeting')) + '</b>') +
       (link ? '<a class="joinB" href="' + esc(link) + '" target="_blank" rel="noopener">' + ICON.vid + esc(t('btn.join_meeting')) + '</a><span style="font-size:12px;color:#D8CBB6;text-align:center">' + esc(link.replace(/^https?:\/\//, '')) + '</span>' : '') + '</div>' +
     (nm && nm['Agenda'] ? '<div class="card"><b>' + esc(t('field.agenda')) + '</b><div style="white-space:pre-wrap">' + esc(nm['Agenda']) + '</div></div>' : '') +
+    pastMeetings(nm) +
     '</div>';
 };
+
+// ───────── Meeting notes ─────────
+// Reads the "Notes" column of the Meetings sheet (also "Meeting notes" or "Notes link").
+// Web links inside the notes (a Google Doc, Gemini notes, a recording) become tappable.
+function meetNotes(m) { return String(m['Notes'] || m['Meeting notes'] || '').trim(); }
+function meetNotesLink(m) { return String(m['Notes link'] || '').trim(); }
+function linkify(s) {
+  return esc(s).replace(/https?:\/\/[^\s<]+/g, function (u) {
+    return '<a href="' + u + '" target="_blank" rel="noopener" style="color:var(--geru);word-break:break-all">' + u + '</a>';
+  });
+}
+function pastMeetings(nm) {
+  var hi = S.lang === 'hi', now = Date.now();
+  var past = B.meetings.filter(function (x) { return x !== nm && x['Start (UTC)'] && new Date(x['Start (UTC)']).getTime() <= now; })
+    .sort(function (a, b) { return new Date(b['Start (UTC)']) - new Date(a['Start (UTC)']); });
+  var nmNotes = nm ? meetNotes(nm) : '';
+  var out = nmNotes ? '<div class="card"><b>' + esc(t('field.notes', hi ? 'नोट्स' : 'Notes')) + '</b><div style="white-space:pre-wrap">' + linkify(nmNotes) + '</div></div>' : '';
+  out += '<h2 class="h2" style="margin:12px 0 0">' + esc(t('meet.past', hi ? 'पिछली मीटिंग' : 'Past meetings')) + '</h2>';
+  if (!past.length) return out + '<p class="muted" style="margin:0">' + esc(t('meet.no_past', hi ? 'अभी कोई पिछली मीटिंग नहीं।' : 'No past meetings yet.')) + '</p>';
+  return out + past.map(function (m, i) {
+    var notes = meetNotes(m), nl = meetNotesLink(m), ag = String(m['Agenda'] || '').trim();
+    var body = (notes ? '<div style="white-space:pre-wrap;margin-top:8px">' + linkify(notes) + '</div>' : '') +
+      (nl ? '<div style="margin-top:8px"><a href="' + esc(nl) + '" target="_blank" rel="noopener" style="color:var(--geru);font-weight:700">' + esc(hi ? 'नोट्स खोलें' : 'Open notes') + ' ↗</a></div>' : '') +
+      (ag ? '<div class="muted" style="margin-top:8px"><b>' + esc(t('field.agenda')) + ':</b> <span style="white-space:pre-wrap">' + esc(ag) + '</span></div>' : '') +
+      (!notes && !nl ? '<div class="muted" style="margin-top:8px">' + esc(t('meet.no_notes', hi ? 'अभी नोट्स नहीं जोड़े गए।' : 'No notes added yet.')) + '</div>' : '');
+    return '<details class="card"' + (i === 0 ? ' open' : '') + '><summary style="cursor:pointer;min-height:44px;display:flex;flex-direction:column;justify-content:center">' +
+      '<b>' + esc(m['Title'] || t('tab.meetings')) + '</b><span class="muted">' + esc(fmtDayIn(m['Start (UTC)'])) + (notes || nl ? '' : ' · ' + esc(hi ? 'नोट्स नहीं' : 'no notes')) + '</span></summary>' + body + '</details>';
+  }).join('');
+}
 
 V.share = function () {
   var icon = { photo: '📷', video: '🎬', file: '📎', voice: '🎙️' };
@@ -807,7 +840,7 @@ V.settings = function () {
   if (!B.me.isOwner) return '';
   return '<div style="max-width:720px;display:flex;flex-direction:column;gap:12px">' +
     '<div class="card"><h2 class="h2">' + esc(t('settings.tabs')) + '</h2><p class="muted">' + esc(t('settings.tabs_note')) + '</p>' +
-      B.tabs.filter(function (x) { return ['home', 'settings'].indexOf(x.id) === -1; }).map(function (x) {
+      B.tabs.filter(function (x) { return ['home', 'settings'].indexOf(x.id) === -1 && !x.local; }).map(function (x) {
         return '<div class="lrow"><span>' + esc(tabLabel(x)) + ' <span class="muted">· ' + esc(t('phase.' + x.phase, 'Phase ' + x.phase)) + '</span></span><button class="sw ' + (x.visible ? 'on' : 'off') + '" data-act="tabVis" data-id="' + esc(x.id) + '">' + esc(x.visible ? t('settings.on') : t('settings.off')) + '</button></div>';
       }).join('') + '</div>' +
     '<div class="card"><h2 class="h2">' + esc(t('fb.list', 'Feedback from the team')) + '</h2>' +
@@ -815,9 +848,67 @@ V.settings = function () {
     '<div class="card"><p style="margin-top:0">' + esc(t('settings.sheet_note')) + '</p>' + (B.sheetUrl ? '<a class="btn" style="display:inline-flex;align-items:center;text-decoration:none" target="_blank" rel="noopener" href="' + esc(B.sheetUrl) + '">' + esc(t('app.open_sheet')) + '</a>' : '') + '</div></div>';
 };
 
+// ───────── Chapters: one page per chapter with its notes, files and tasks ─────────
+// Notes are saved in the Ideas sheet with the chapter as Unit and the tag "note",
+// so they also appear in Idea Dump. Drive links open with the Gmail used to sign in here.
+function L(key, en, hi) { return t(key, S.lang === 'hi' ? hi : en); }
+function myEmail() { return (B.me && B.me.email) || stored('bt_email') || ''; }
+function withUser(url) {
+  url = String(url || ''); var em = myEmail();
+  if (!em || !/^https:\/\/(drive|docs)\.google\.com\//.test(url) || /[?&]authuser=/.test(url)) return url;
+  return url + (url.indexOf('?') > -1 ? '&' : '?') + 'authuser=' + encodeURIComponent(em);
+}
+function ensureChaptersTab() {
+  if (!B.labels['tab.chapters']) B.labels['tab.chapters'] = { en: 'Chapters', hi: 'अध्याय' };
+  if (B.tabs.some(function (x) { return x.id === 'chapters'; })) return;
+  var i = B.tabs.map(function (x) { return x.id; }).indexOf('home');
+  B.tabs.splice(i + 1, 0, { id: 'chapters', key: 'tab.chapters', visible: true, phase: 1, local: true });
+}
+V.chapters = function () {
+  if (!B.units.length) return '<p class="muted">' + esc(L('ch.none', 'No chapters in the sheet yet.', 'शीट में अभी कोई अध्याय नहीं है।')) + '</p>';
+  var u = unitById(S.chUnit) || B.units[0]; S.chUnit = String(u['Unit ID']);
+  var id = S.chUnit, hi = S.lang === 'hi';
+  var chips = '<div class="row" role="tablist" style="gap:6px">' + B.units.map(function (x) {
+    var on = String(x['Unit ID']) === id;
+    return '<button class="t2' + (on ? ' on' : '') + '" role="tab" aria-selected="' + on + '" data-act="chPick" data-id="' + esc(x['Unit ID']) + '">' + esc(x['Short name'] || x['Name']) + '</button>';
+  }).join('') + '</div>';
+  var folder = u['Folder ID'] ? withUser('https://drive.google.com/drive/folders/' + encodeURIComponent(u['Folder ID'])) : '';
+  var head = '<div class="card" style="display:flex;flex-direction:column;gap:8px">' +
+    '<div class="muted" style="font-weight:700;letter-spacing:.04em">' + esc(u['Short name'] || '') + (u['Section / Part'] ? ' · ' + esc(u['Section / Part']) : '') + '</div>' +
+    '<h2 class="h2" style="font-size:22px">' + esc(u['Name'] || u['Short name'] || '') + '</h2>' +
+    '<div class="muted">' + (u['Owner'] ? esc(t('bm.owner')) + ': ' + esc(u['Owner']) + ' · ' : '') + unitPct(id) + '% ' + esc(L('ch.done', 'done', 'पूरा')) + '</div>' +
+    (folder ? '<div class="row"><a class="btn" style="display:inline-flex;align-items:center;gap:6px;text-decoration:none" target="_blank" rel="noopener" href="' + esc(folder) + '">📁 ' + esc(L('ch.open_drive', 'Open chapter folder in Drive', 'Drive में अध्याय फ़ोल्डर खोलें')) + '</a>' +
+      '<span class="muted">' + esc(L('ch.opens_as', 'Opens with', 'इस खाते से खुलेगा:')) + ' ' + esc(myEmail()) + '</span></div>' : '') +
+    '</div>';
+  var notes = B.ideas.filter(function (d) { return String(d['Unit'] || '') === id; }).slice().reverse();
+  var box = '<div class="card" style="display:flex;flex-direction:column;gap:8px"><label class="lab" for="chNote" style="margin:0">' + esc(L('ch.add_note', 'Add a note to this chapter', 'इस अध्याय में नोट जोड़ें')) + '</label>' +
+    '<textarea class="fld" id="chNote" rows="4" style="min-height:100px">' + esc(S.chDraft[id] || '') + '</textarea>' +
+    '<div class="row"><button class="btn" data-act="chNote">' + esc(L('ch.save_note', 'Save note', 'नोट सेव करें')) + '</button><span class="muted">' + esc(L('ch.note_hint', 'Everyone on the team can see notes. They also show in Idea Dump.', 'नोट्स पूरी टीम देख सकती है। ये Idea Dump में भी दिखते हैं।')) + '</span></div></div>';
+  var list = '<div class="card"><h2 class="h2">' + esc(L('ch.notes', 'Notes', 'नोट्स')) + ' <span class="muted">(' + notes.length + ')</span></h2>' +
+    (notes.length ? notes.map(function (d) {
+      return '<div class="recent" style="padding:10px 0"><div style="white-space:pre-wrap;font-size:16px">' + linkify(d['Idea']) + '</div>' +
+        '<div class="row" style="justify-content:space-between;margin-top:4px"><span class="muted">' + esc(d['Added by'] || '') + ' · ' + esc(fmtDay(String(d['Added on'] || '').slice(0, 10))) + (d['Tags'] && d['Tags'] !== 'note' ? ' · <span style="color:var(--geru)">' + esc(d['Tags']) + '</span>' : '') + '</span>' +
+        '<button class="btn2" data-act="editIdea" data-id="' + esc(d['Row ID']) + '">' + esc(t('btn.edit')) + '</button></div></div>';
+    }).join('') : '<p class="muted">' + esc(L('ch.no_notes', 'No notes for this chapter yet.', 'इस अध्याय के लिए अभी कोई नोट नहीं।')) + '</p>') + '</div>';
+  var files = (B.shared || []).filter(function (r) { return String(r['Unit'] || '') === id; });
+  var fileCard = '<div class="card"><h2 class="h2">' + esc(L('ch.files', 'Photos, voice notes & files', 'फ़ोटो, वॉइस नोट और फ़ाइलें')) + ' <span class="muted">(' + files.length + ')</span></h2>' +
+    (files.length ? files.map(function (r) {
+      return '<div class="recent row" style="justify-content:space-between;flex-wrap:nowrap"><div style="min-width:0"><b>' + esc(r['Person'] || r['Added by'] || '') + '</b> · <span class="muted">' + esc(ago(r['Date and time'] || r['Added on'])) + '</span>' +
+        (r['Caption'] ? '<div style="white-space:pre-wrap;overflow-wrap:anywhere">' + esc(r['Caption']) + '</div>' : '') + '</div>' +
+        (r['File link'] ? '<a class="btn2" style="display:inline-flex;align-items:center;text-decoration:none;flex:none" target="_blank" rel="noopener" href="' + esc(withUser(r['File link'])) + '">' + esc(t('share.open', 'Open')) + '</a>' : '') + '</div>';
+    }).join('') : '<p class="muted">' + esc(t('share.none', 'Nothing shared yet.')) + '</p>') + '</div>';
+  var tasks = B.tasks.map(tv).filter(function (k) { return String(k.unit) === id && !k.done; }).sort(taskSort);
+  var taskCard = '<div class="card"><h2 class="h2">' + esc(L('ch.tasks', 'Open tasks', 'बाकी काम')) + ' <span class="muted">(' + tasks.length + ')</span></h2>' +
+    (tasks.length ? tasks.map(tickRow).join('') : '<p class="muted">' + esc(t('msg.no_tasks')) + '</p>') + '</div>';
+  return '<div style="display:flex;flex-direction:column;gap:12px">' + chips + head +
+    '<div class="chcols">' + '<div style="display:flex;flex-direction:column;gap:12px;min-width:0">' + box + list + '</div>' +
+    '<div style="display:flex;flex-direction:column;gap:12px;min-width:0">' + fileCard + taskCard + '</div></div></div>';
+};
+
 function placeholder() { return '<div class="note">' + esc(t('app.coming')) + '</div>'; }
 
 function render() {
+  ensureChaptersTab();
   renderNav();
   renderWho(B);
   var vt = visibleTabs();
@@ -964,6 +1055,11 @@ var ACT = {
   },
   delTask: function (el) { archive('Tasks', el); },
   delIdea: function (el) { archive('Ideas', el); },
+  chPick: function (el) { S.chUnit = el.dataset.id; render(); },
+  chNote: function () {
+    var id = S.chUnit, text = val('chNote'); if (!text) { $('chNote').focus(); return; }
+    save('Ideas', { 'Idea': text, 'Unit': id, 'Tags': 'note' }).then(function () { S.chDraft[id] = ''; render(); }, function () {});
+  },
   addIdea: function () {
     var text = val('niText'); if (!text) { $('niText').focus(); return; }
     save('Ideas', { 'Idea': text, 'Unit': val('niUnit'), 'Tags': val('niTags') });
@@ -1048,6 +1144,8 @@ document.addEventListener('contextmenu', function (e) {
   e.preventDefault(); clearTimeout(pressTimer); longPressed = false; commentSheet(el.dataset.unit, el.dataset.stage);
 });
 document.addEventListener('visibilitychange', function () { if (!document.hidden) refresh(true); });
+// Keep a half-written chapter note when the page refreshes itself.
+document.addEventListener('input', function (e) { if (e.target && e.target.id === 'chNote') S.chDraft[S.chUnit] = e.target.value; });
 setInterval(function () { if (!document.hidden) refresh(true); }, 120000);
 var lastWide = wide();
 window.addEventListener('resize', function () { if (wide() !== lastWide) { lastWide = wide(); render(); } });

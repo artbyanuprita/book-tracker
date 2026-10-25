@@ -268,8 +268,17 @@ function cachedBoot() {
 function showGate(reason) {
   store('bt_session', null); store('bt_boot', null);
   gid('gate').classList.remove('hidden');
-  gid('gbtn').classList.remove('hidden');
+  showSignIn();
   if (reason === 'expired') gateText('Please sign in again. · कृपया फिर से साइन इन करें।');
+}
+// Google's sign-in code is only downloaded when someone actually needs to sign in,
+// so phones that are already signed in open faster.
+var gisLoading = false;
+function showSignIn() {
+  gid('gbtn').classList.remove('hidden');
+  if (gisLoading) return; gisLoading = true;
+  var s = document.createElement('script'); s.src = 'https://accounts.google.com/gsi/client'; s.async = true; s.onload = gisReady;
+  document.head.appendChild(s);
 }
 function gisReady() {
   if (!window.google || !google.accounts || CONFIG.CLIENT_ID.indexOf('PASTE') === 0) return;
@@ -310,25 +319,22 @@ function renderWho(b) {
   if (CONFIG.API_URL.indexOf('PASTE') === 0 || CONFIG.CLIENT_ID.indexOf('PASTE') === 0) {
     gateText('Setup is not finished: add API_URL and CLIENT_ID at the top of this page.', true); return;
   }
-  if (!stored('bt_session')) { gid('gbtn').classList.remove('hidden'); return; }
+  if (!stored('bt_session')) { showSignIn(); return; }
   var cached = cachedBoot();
   if (cached) {   // show saved data as soon as the whole page has loaded; startApp then fetches fresh data
     var go = function () {
       try { begin(cached); }
       catch (err) {   // saved copy unusable: drop it and load from the server as before
-        store('bt_boot', null); started = false;
-        gid('gate').classList.remove('hidden'); gateText('Loading… · लोड हो रहा है…');
-        api('appRefresh').then(begin, function (e) { if (e.code !== 'signin') { gateText(e.message, true); gid('gbtn').classList.remove('hidden'); } });
+        store('bt_boot', null); window.location.reload();
       }
     };
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', go); else go();
     return;
   }
   gateText('Loading… · लोड हो रहा है…');
-  api('appRefresh').then(begin, function (e) { if (e.code !== 'signin') { gateText(e.message, true); gid('gbtn').classList.remove('hidden'); } });
+  api('appRefresh').then(begin, function (e) { if (e.code !== 'signin') { gateText(e.message, true); showSignIn(); } });
 })();
 </script>
-<script src="https://accounts.google.com/gsi/client" async defer onload="gisReady()"></script>
 <script>
 function startApp(B) {
 // ───────── State ─────────
@@ -482,19 +488,50 @@ function logLocal(action, tab, summary) {
   B.activity.unshift({ 'Date and time': new Date().toISOString(), 'Person': B.me.name, 'Action': action, 'Tab': tab, 'Summary': summary });
   B.activity = B.activity.slice(0, 12);
 }
+// Tasks and notes show on screen straight away and are sent to the sheet in the background.
+// If the sheet refuses, the change is taken back and an error is shown.
+var PENDING = {};   // temporary id → { tab, row, promise } for rows still being created
+function removeRow(tab, id) { var l = listFor(tab); for (var i = l.length - 1; i >= 0; i--) if (l[i]['Row ID'] === id) l.splice(i, 1); }
 function save(tab, obj, okMsg) {
-  toast(t('app.saving'), 'busy');
-  return run('appSaveRow', tab, obj).then(function (row) {
-    var isNew = !obj['Row ID'];
+  if (tab !== 'Tasks' && tab !== 'Ideas') {
+    toast(t('app.saving'), 'busy');
+    return run('appSaveRow', tab, obj).then(function (row) { upsert(tab, row); toast(okMsg || t('msg.saved'), 'ok'); render(); return row; },
+      function (e) { fail(e); render(); throw e; });
+  }
+  var id = obj['Row ID'];
+  if (id && PENDING[id]) {   // still being created: wait for its real id, then save the change
+    return PENDING[id].promise.then(function (row) { var o = {}; for (var k in obj) o[k] = obj[k]; o['Row ID'] = row['Row ID']; return save(tab, o, okMsg); });
+  }
+  var isNew = !id, tmp = '', before = null, k;
+  if (isNew) {
+    tmp = 'tmp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
+    var row = {}; for (k in obj) row[k] = obj[k];
+    row['Row ID'] = tmp; row['Added by'] = B.me.name; row['Added on'] = new Date().toISOString();
+    listFor(tab).push(row);
+  } else {
+    var cur = listFor(tab).filter(function (x) { return x['Row ID'] === id; })[0];
+    if (cur) { before = {}; for (k in cur) before[k] = cur[k]; for (k in obj) cur[k] = obj[k]; }
+  }
+  toast(okMsg || t('msg.saved'), 'ok'); render();
+  var p = run('appSaveRow', tab, obj).then(function (row) {
+    if (isNew) { removeRow(tab, tmp); delete PENDING[tmp]; }
     upsert(tab, row); logLocal(isNew ? 'added' : 'updated', tab, row['Task'] || row['Idea'] || '');
-    toast(okMsg || t('msg.saved'), 'ok'); render(); return row;
-  }, function (e) { fail(e); render(); throw e; });
+    if (!S.sheetOpen) render(); return row;
+  }, function (e) {
+    if (isNew) { removeRow(tab, tmp); delete PENDING[tmp]; } else if (before) upsert(tab, before);
+    fail(e); render(); throw e;
+  });
+  if (isNew) PENDING[tmp] = { tab: tab, row: listFor(tab)[listFor(tab).length - 1], promise: p };
+  p.catch(function () {});   // the error is already shown; callers may still listen
+  return p;
 }
 function refresh(quiet) {
   if (S.sheetOpen) return Promise.resolve();
   if (!quiet) toast(t('app.loading'), 'busy');
   return run('appRefresh').then(function (d) {
-    var lang = S.lang; B = d; S.lang = lang; saveBoot(d); render(); if (!quiet) toast('✓', 'ok', 800);
+    var lang = S.lang; B = d; S.lang = lang; saveBoot(d);
+    for (var k in PENDING) listFor(PENDING[k].tab).push(PENDING[k].row);   // keep rows still being saved
+    render(); if (!quiet) toast('✓', 'ok', 800);
   }, function (e) { if (!quiet) fail(e); });
 }
 
@@ -799,16 +836,17 @@ function keepShareInputs() { if ($('shUnit')) S.shUnit = $('shUnit').value; if (
 function goShare(el) { if (el && el.dataset && el.dataset.go && S.tab !== 'share') { S.tab = 'share'; var tb = B.tabs.filter(function (x) { return x.id === 'share'; })[0]; if (tb && tb.phase) S.phase = tb.phase; window.scrollTo(0, 0); render(); } }
 function toB64(blob) { return new Promise(function (res, rej) { var r = new FileReader(); r.onload = function () { res(String(r.result).split(',')[1] || ''); }; r.onerror = function () { rej(new Error('Could not read the file.')); }; r.readAsDataURL(blob); }); }
 function shrinkPhoto(file) {
-  var max = +B.settings.photo_max_px || 2000;
-  if (!/^image\/(jpeg|png|webp)$/i.test(file.type)) return Promise.resolve({ blob: file, name: file.name });
+  // Phone photos are often 3–6 MB. 1600 px is plenty to see a painting; this makes them ~300–600 KB.
+  var max = +B.settings.photo_max_px || 1600;
+  if (!/^image\/(jpeg|png|webp|heic|heif)$/i.test(file.type)) return Promise.resolve({ blob: file, name: file.name });
   return new Promise(function (res) {
     var url = URL.createObjectURL(file), img = new Image();
     img.onload = function () {
       var k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
-      if (k === 1 && file.size < 1500000) { URL.revokeObjectURL(url); res({ blob: file, name: file.name }); return; }
+      if (k === 1 && file.size < 700000) { URL.revokeObjectURL(url); res({ blob: file, name: file.name }); return; }
       var c = document.createElement('canvas'); c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
       c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
-      c.toBlob(function (b) { res(b ? { blob: b, name: String(file.name || 'photo').replace(/\.[^.]+$/, '') + '.jpg' } : { blob: file, name: file.name }); }, 'image/jpeg', 0.85);
+      c.toBlob(function (b) { res(b && b.size < file.size ? { blob: b, name: String(file.name || 'photo').replace(/\.[^.]+$/, '') + '.jpg' } : { blob: file, name: file.name }); }, 'image/jpeg', 0.8);
     };
     img.onerror = function () { URL.revokeObjectURL(url); res({ blob: file, name: file.name }); };
     img.src = url;
@@ -816,13 +854,16 @@ function shrinkPhoto(file) {
 }
 function sendBlob(blob, name, kind, n, total) {
   if (blob.size > SHARE_MAX) { toast(t('share.too_big', 'This file is over 30 MB. Please send it through Drive or WhatsApp.') + ' (' + name + ')', 'err', 7000); return Promise.resolve(); }
-  toast(t('share.sending', 'Sending…') + (total > 1 ? ' ' + n + '/' + total : '') + ' · ' + name, 'busy');
+  var mb = (blob.size / 1048576).toFixed(1);
+  var keepOpen = blob.size > 8 * 1048576 ? ' · ' + (S.lang === 'hi' ? 'बड़ी फ़ाइल है, ऐप खुला रखें' : 'big file, keep the app open') : '';
+  toast(t('share.sending', 'Sending…') + (total > 1 ? ' ' + n + '/' + total : '') + ' · ' + name + ' (' + mb + ' MB)' + keepOpen, 'busy');
+  var unit = S.shUnit, cap = S.shCap;
   return toB64(blob).then(function (b64) {
-    return run('appShare', { type: kind, name: name, mime: blob.type || 'application/octet-stream', data: b64, unit: S.shUnit, caption: S.shCap });
+    return run('appShare', { type: kind, name: name, mime: blob.type || 'application/octet-stream', data: b64, unit: unit, caption: cap });
   }).then(function (row) {
     B.shared = [row].concat(B.shared || []); logLocal('added', 'SharedItems', name);
     if (n === total) { S.shCap = ''; toast(t('share.sent', 'Sent ✓'), 'ok'); }
-    render();
+    if (!S.sheetOpen) render();
   }, fail);
 }
 function pickFiles(kind) {
@@ -832,13 +873,17 @@ function pickFiles(kind) {
   inp.style.display = 'none'; document.body.appendChild(inp);
   inp.onchange = function () {
     var files = Array.prototype.slice.call(inp.files || []); inp.remove(); if (!files.length) return;
-    var chain = Promise.resolve();
-    files.forEach(function (f, i) {
-      chain = chain.then(function () {
-        var k = kind === 'file' && /^image\//.test(f.type) ? 'photo' : kind;
-        return (k === 'photo' ? shrinkPhoto(f) : Promise.resolve({ blob: f, name: f.name })).then(function (x) { return sendBlob(x.blob, x.name || k, k, i + 1, files.length); });
-      });
-    });
+    // Send two at a time instead of one after another.
+    var next = 0, done = 0;
+    function worker() {
+      if (next >= files.length) return Promise.resolve();
+      var f = files[next++];
+      var k = kind === 'file' && /^image\//.test(f.type) ? 'photo' : kind;
+      return (k === 'photo' ? shrinkPhoto(f) : Promise.resolve({ blob: f, name: f.name }))
+        .then(function (x) { return sendBlob(x.blob, x.name || k, k, ++done, files.length); })
+        .then(worker, worker);
+    }
+    worker(); if (files.length > 1) worker();
   };
   inp.click();
 }
@@ -847,7 +892,9 @@ function startVoice() {
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder) { toast(t('share.no_mic', 'This browser cannot record. Record in your phone\'s recorder app and send it with File.'), 'err', 7000); return; }
   navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
     var mime = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/webm', 'audio/aac'].filter(function (m) { return MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(m); })[0] || '';
-    var mr; try { mr = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream); } catch (e) { mr = new MediaRecorder(stream); }
+    // 32 kbps is clear for speech and about a quarter the size of the phone's default.
+    var opts = { audioBitsPerSecond: 32000 }; if (mime) opts.mimeType = mime;
+    var mr; try { mr = new MediaRecorder(stream, opts); } catch (e) { try { mr = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream); } catch (e2) { mr = new MediaRecorder(stream); } }
     REC = { mr: mr, chunks: [], stream: stream, start: Date.now(), cancel: false };
     mr.ondataavailable = function (e) { if (e.data && e.data.size) REC.chunks.push(e.data); };
     mr.onstop = function () {
@@ -1072,9 +1119,8 @@ var ACT = {
     var done = r['Status'] === 'done';
     var prev = r['Status'] || 'todo';
     var obj = { 'Row ID': r['Row ID'], 'Status': done ? 'todo' : 'done' }; if (!done) obj['Stuck'] = 'no';
-    save('Tasks', obj).then(function () {
-      if (!done) showUndo(t('msg.done', 'Done ✓'), function () { save('Tasks', { 'Row ID': r['Row ID'], 'Status': prev }); });
-    }, function () {});
+    save('Tasks', obj).catch(function () {});
+    if (!done) showUndo(t('msg.done', 'Done ✓'), function () { save('Tasks', { 'Row ID': r['Row ID'], 'Status': prev }).catch(function () {}); });
   },
   stuck: function (el) {
     var r = B.tasks.filter(function (x) { return x['Row ID'] === el.dataset.id; })[0]; if (!r) return;
@@ -1090,7 +1136,8 @@ var ACT = {
   chPick: function (el) { S.chUnit = el.dataset.id; render(); },
   chNote: function () {
     var key = S.chUnit, text = val('chNote'); if (!text) { $('chNote').focus(); return; }
-    save('Ideas', { 'Idea': text, 'Unit': key === '_' ? '' : key, 'Tags': 'note' }).then(function () { S.chDraft[key] = ''; render(); }, function () {});
+    S.chDraft[key] = '';
+    save('Ideas', { 'Idea': text, 'Unit': key === '_' ? '' : key, 'Tags': 'note' }).catch(function () { S.chDraft[key] = text; render(); });
   },
   addIdea: function () {
     var text = val('niText'); if (!text) { $('niText').focus(); return; }
